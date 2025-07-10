@@ -29,6 +29,56 @@ A static web application that visualizes GitHub statistics and collaboration pat
    ```
 4. Open [http://localhost:5173](http://localhost:5173) in your browser
 
+## CSV Format Requirements
+
+The stats visualizer requires a CSV file with specific headers to properly parse and analyze your GitHub repository data. The CSV must include the following headers in any order:
+
+### Required CSV Headers
+
+```
+Org_Name,Repo_Name,Is_Empty,Last_Push,Last_Update,Is_Fork,Is_Archived,Repo_Size_MB,Collaborator_Count,Protected_Branch_Count,Milestone_Count,Issue_Count,Pull_Request_Count,PR_Review_Count,PR_Review_Comment_Count,Commit_Comment_Count,Issue_Comment_Count,Issue_Event_Count,Release_Count,Project_Count,Branch_Count,Tag_Count,Discussion_Count,Has_Wiki,Repo_URL,Migration_Issue,Created
+```
+
+### Header Descriptions
+
+| Header | Type | Description |
+|--------|------|-------------|
+| `Org_Name` | string | Organization or user name that owns the repository |
+| `Repo_Name` | string | Name of the repository |
+| `Repo_Size_MB` | number | Size of the repository in megabytes |
+| `Issue_Count` | number | Total number of issues in the repository |
+| `Pull_Request_Count` | number | Total number of pull requests |
+| `Commit_Comment_Count` | number | Total number of commit comments |
+| `Milestone_Count` | number | Total number of milestones |
+| `Release_Count` | number | Total number of releases |
+| `Tag_Count` | number | Total number of tags |
+| `Issue_Comment_Count` | number | Total number of issue comments |
+| `PR_Review_Comment_Count` | number | Total number of PR review comments |
+| `Branch_Count` | number | Total number of branches |
+| `Last_Push` | string | ISO 8601 timestamp of the last push |
+| `Created` | string | ISO 8601 timestamp when the repository was created |
+| `Collaborator_Count` | number | Number of collaborators with access |
+| `Protected_Branch_Count` | number | Number of protected branches |
+| `Project_Count` | number | Number of projects in the repository |
+| `Has_Wiki` | number | Whether the repository has a wiki (1 for true, 0 for false) |
+| `Discussion_Count` | number | Total number of discussions |
+| `PR_Review_Count` | number | Total number of PR reviews |
+| `Issue_Event_Count` | number | Total number of issue events |
+| `Is_Empty` | boolean | Whether the repository is empty (true/false) |
+| `Is_Fork` | boolean | Whether the repository is a fork (true/false) |
+| `Is_Archived` | boolean | Whether the repository is archived (true/false) |
+| `Last_Update` | string | ISO 8601 timestamp of the last update |
+| `Repo_URL` | string | URL of the repository |
+| `Migration_Issue` | boolean | Whether there are migration issues (true/false) |
+
+### Sample CSV Row
+
+```csv
+myorg,awesome-project,false,2024-12-15T10:30:00.000Z,2024-12-15T09:45:00.000Z,false,false,250.5,5,2,3,15,8,12,25,10,30,5,2,1,10,3,8,1,https://github.com/myorg/awesome-project,false,2024-01-15T08:00:00.000Z
+```
+
+**Note:** All headers must be present in the CSV file for the application to parse the data correctly. Missing headers will result in parsing errors.
+
 ## Adding a New Dashboard Chart
 
 The application is designed to be easily extensible. Here's how to add a new chart component:

@@ -15,6 +15,24 @@ A static web application that visualizes GitHub statistics and collaboration pat
 - 👥 Collaboration pattern insights
 - 🎨 Modern, responsive UI
 - ⚡ Fast performance with Vite, React and Typescript
+- 🏢 Organization-level statistics and filtering
+- 📦 JSON input from gh-github-stats
+
+## Data Format
+
+Use the JSON output from [`gh-github-stats`](https://github.com/cvega/gh-github-stats):
+
+```bash
+# Generate comprehensive stats
+gh github-stats run --org your-org
+
+# Upload the generated repo-stats.json to the visualizer
+```
+
+The JSON format includes:
+- **Organization metadata**: Members, teams, settings, secrets, variables
+- **Repository statistics**: 150+ fields per repository
+- **Migration-ready data**: Everything needed for GitHub migrations
 
 ## Getting Started
 

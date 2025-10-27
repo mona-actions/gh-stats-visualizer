@@ -20,7 +20,7 @@ import type {
   RepositoryMetadata,
   RepositoryReleaseInfo,
   BasicStats,
-} from "@types";
+} from "../../types";
 import type { DataItem } from "../Charts/Bar";
 import {
   GenericBarChart,
@@ -333,6 +333,345 @@ export function RepositoryTable({
 }
 
 /**
+ * Renders security feature adoption chart (Dependabot, Secret Scanning, Push Protection).
+ * @param data - Array of security feature stats.
+ * @returns JSX element for the stacked bar chart.
+ */
+function SecurityAdoption({ data }: { data: Array<{ name: string; enabled: number; disabled: number }> }) {
+  return (
+    <GenericBarChart
+      title="Security Features Adoption"
+      data={data}
+      bars={[
+        { dataKey: "enabled", name: "Enabled", fill: CHART_COLORS.GREEN, stackId: "a" },
+        { dataKey: "disabled", name: "Disabled", fill: CHART_COLORS.GRAY, stackId: "a" },
+      ]}
+      layout="vertical"
+      height={250}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 120,
+        stroke: "#8b949e",
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders programming language distribution pie chart.
+ * @param data - Array of language usage stats.
+ * @returns JSX element for the pie chart.
+ */
+function LanguageDistribution({ data }: { data: Array<{ name: string; value: number }> }) {
+  return (
+    <GenericPieChart
+      title="Top Programming Languages"
+      data={data}
+      dataKey="value"
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+    />
+  );
+}
+
+/**
+ * Renders repository settings/feature enablement chart.
+ * @param data - Array of settings stats.
+ * @returns JSX element for the stacked bar chart.
+ */
+function SettingsAdoption({ data }: { data: Array<{ feature: string; enabled: number; disabled: number }> }) {
+  const chartData = data.map(item => ({ name: item.feature, enabled: item.enabled, disabled: item.disabled }));
+  
+  return (
+    <GenericBarChart
+      title="Repository Features Enabled"
+      data={chartData}
+      bars={[
+        { dataKey: "enabled", name: "Enabled", fill: CHART_COLORS.BLUE, stackId: "a" },
+        { dataKey: "disabled", name: "Disabled", fill: CHART_COLORS.GRAY, stackId: "a" },
+      ]}
+      layout="vertical"
+      height={250}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 90,
+        stroke: "#8b949e",
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders license distribution pie chart.
+ * @param data - Array of license usage stats.
+ * @returns JSX element for the pie chart.
+ */
+function LicenseDistribution({ data }: { data: Array<{ name: string; value: number }> }) {
+  if (data.length === 0) return null;
+  
+  return (
+    <GenericPieChart
+      title="Repository Licenses"
+      data={data}
+      dataKey="value"
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+    />
+  );
+}
+
+/**
+ * Renders most common repository topics bar chart.
+ * @param data - Array of topic usage stats.
+ * @returns JSX element for the bar chart.
+ */
+function TopicsDistribution({ data }: { data: Array<{ name: string; value: number }> }) {
+  if (data.length === 0) return null;
+  
+  return (
+    <GenericBarChart
+      title="Most Common Repository Topics"
+      data={data}
+      bars={[{ dataKey: "value", name: "Repositories", fill: CHART_COLORS.PURPLE }]}
+      layout="vertical"
+      height={500}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 120,
+        stroke: "#8b949e",
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders traffic analytics for top repositories (views and clones).
+ * @param data - Array of traffic stats.
+ * @returns JSX element for the grouped bar chart.
+ */
+function TrafficAnalytics({ data }: { data: Array<{ name: string; views: number; clones: number; viewsUniques: number; clonesUniques: number }> }) {
+  if (data.length === 0) return null;
+  
+  return (
+    <GenericBarChart
+      title="Top 10 Repositories by Traffic"
+      data={data}
+      bars={[
+        { dataKey: "views", name: "Views", fill: CHART_COLORS.BLUE },
+        { dataKey: "clones", name: "Clones", fill: CHART_COLORS.GREEN },
+      ]}
+      layout="vertical"
+      height={400}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 120,
+        stroke: "#8b949e",
+        tick: renderVerticalTick,
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+      labelFormatter={formatRepoName}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders GitHub Actions usage for top repositories.
+ * @param data - Array of actions stats.
+ * @returns JSX element for the grouped bar chart.
+ */
+function ActionsUsage({ data }: { data: Array<{ name: string; workflows: number; secrets: number; variables: number; runners: number }> }) {
+  if (data.length === 0) return null;
+  
+  return (
+    <GenericBarChart
+      title="Top 10 Repositories by Actions Usage"
+      data={data}
+      bars={[
+        { dataKey: "workflows", name: "Workflows", fill: CHART_COLORS.BLUE },
+        { dataKey: "secrets", name: "Secrets", fill: CHART_COLORS.PURPLE },
+        { dataKey: "variables", name: "Variables", fill: CHART_COLORS.GREEN },
+        { dataKey: "runners", name: "Runners", fill: CHART_COLORS.ORANGE },
+      ]}
+      layout="vertical"
+      height={400}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 120,
+        stroke: "#8b949e",
+        tick: renderVerticalTick,
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+      labelFormatter={formatRepoName}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders aggregate issues and PRs statistics.
+ * @param data - Issues/PRs aggregate stats.
+ * @returns JSX element for the stat cards.
+ */
+function IssuesPRsAggregate({ data }: { data: { openIssues: number; closedIssues: number; openPRs: number; closedPRs: number; mergedPRs: number; totalLabels: number } }) {
+  const chartData = [
+    { name: "Open Issues", value: data.openIssues, fill: CHART_COLORS.ORANGE },
+    { name: "Closed Issues", value: data.closedIssues, fill: CHART_COLORS.GREEN },
+    { name: "Open PRs", value: data.openPRs, fill: CHART_COLORS.BLUE },
+    { name: "Closed PRs", value: data.closedPRs, fill: CHART_COLORS.PURPLE },
+    { name: "Merged PRs", value: data.mergedPRs, fill: CHART_COLORS.GREEN },
+  ].filter(item => item.value > 0);
+  
+  if (chartData.length === 0) return null;
+  
+  return (
+    <GenericPieChart
+      title="Issues & PRs Status"
+      data={chartData}
+      dataKey="value"
+      formatter={(value: ValueType) => formatNumber(Number(value))}
+    />
+  );
+}
+
+/**
+ * Renders community health scores for top repositories.
+ * @param data - Array of community health stats.
+ * @returns JSX element for the bar chart.
+ */
+function CommunityHealth({ data }: { data: Array<{ name: string; health: number }> }) {
+  if (data.length === 0) return null;
+  
+  return (
+    <GenericBarChart
+      title="Top 10 Community Health Scores"
+      data={data}
+      bars={[{ dataKey: "health", name: "Health %", fill: CHART_COLORS.GREEN }]}
+      layout="vertical"
+      height={400}
+      YAxisProps={{
+        type: "category",
+        dataKey: "name",
+        width: 120,
+        stroke: "#8b949e",
+        tick: renderVerticalTick,
+      }}
+      XAxisProps={{
+        type: "number",
+        stroke: "#8b949e",
+      }}
+      formatter={(value: ValueType) => `${value}%`}
+      labelFormatter={formatRepoName}
+      fullWidth
+    />
+  );
+}
+
+/**
+ * Renders community features adoption chart.
+ * @param data - Community features stats.
+ * @returns JSX element for the bar chart.
+ */
+function CommunityFeatures({ data }: { data: { reposWithReadme: number; reposWithCodeOfConduct: number; reposWithContributing: number; reposWithLicenseFile: number; reposWithLFS: number; reposWithPackages: number; totalDeployments: number; totalEnvironments: number; totalWebhooks: number; activeWebhooks: number; totalRulesets: number; total: number } }) {
+  const chartData = [
+    { name: "README", count: data.reposWithReadme, total: data.total },
+    { name: "Code of Conduct", count: data.reposWithCodeOfConduct, total: data.total },
+    { name: "Contributing", count: data.reposWithContributing, total: data.total },
+    { name: "License File", count: data.reposWithLicenseFile, total: data.total },
+    { name: "Git LFS", count: data.reposWithLFS, total: data.total },
+    { name: "Packages", count: data.reposWithPackages, total: data.total },
+  ].filter(item => item.count > 0);
+  
+  const countsData = [
+    { name: "Deployments", value: data.totalDeployments },
+    { name: "Environments", value: data.totalEnvironments },
+    { name: "Webhooks (Total)", value: data.totalWebhooks },
+    { name: "Webhooks (Active)", value: data.activeWebhooks },
+    { name: "Rulesets", value: data.totalRulesets },
+  ].filter(item => item.value > 0);
+  
+  return (
+    <>
+      {chartData.length > 0 && (
+        <GenericBarChart
+          title="Community Features"
+          data={chartData}
+          bars={[
+            { dataKey: "count", name: "Repos with Feature", fill: CHART_COLORS.PURPLE },
+          ]}
+          layout="vertical"
+          height={Math.max(200, chartData.length * 40)}
+          YAxisProps={{
+            type: "category",
+            dataKey: "name",
+            width: 120,
+            stroke: "#8b949e",
+          }}
+          XAxisProps={{
+            type: "number",
+            stroke: "#8b949e",
+          }}
+          formatter={(value: ValueType) => formatNumber(Number(value))}
+          fullWidth
+        />
+      )}
+      {countsData.length > 0 && (
+        <GenericBarChart
+          title="Deployment & Access Controls"
+          data={countsData}
+          bars={[
+            { dataKey: "value", name: "Count", fill: CHART_COLORS.BLUE },
+          ]}
+          layout="vertical"
+          height={Math.max(200, countsData.length * 40)}
+          YAxisProps={{
+            type: "category",
+            dataKey: "name",
+            width: 140,
+            stroke: "#8b949e",
+          }}
+          XAxisProps={{
+            type: "number",
+            stroke: "#8b949e",
+          }}
+          formatter={(value: ValueType) => formatNumber(Number(value))}
+          fullWidth
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * Renders the main dashboard section with all charts and tables.
  * @param stats - The full repository stats object.
  * @returns JSX element for the dashboard section.
@@ -343,6 +682,12 @@ export function DashboardSection({ stats }: { stats: Stats }) {
       {/* Stat cards */}
       <StatsCardGrid stats={stats.basic} />
 
+      {/* Languages & Licenses (together) */}
+      <div style={dashboardGridStyle}>
+        <LanguageDistribution data={stats.languageData} />
+        <LicenseDistribution data={stats.licenseData} />
+      </div>
+
       {/* Main chart grid */}
       <div style={dashboardGridStyle}>
         {/* Pie and Bar Charts */}
@@ -351,7 +696,7 @@ export function DashboardSection({ stats }: { stats: Stats }) {
         <RepositoryUpdateFrequency data={stats.updateData} />
         <RepositoryCreationTime data={stats.yearData} />
         <BranchDistribution data={stats.branchData} />
-        <OrganizationRepositoryDistribution data={stats.orgData} />
+        <IssuesPRsAggregate data={stats.issuesPRsData} />
         <RepoCollaboratorDistribution stats={stats} />
         <RepositoryFeatureDistribution stats={stats} />
         <BranchComplexity data={stats.branchComplexity} />
@@ -360,6 +705,32 @@ export function DashboardSection({ stats }: { stats: Stats }) {
         <RepositoryMetadataRatio data={stats.metadataRatios} />
         <RepositoryTagReleaseFrequency data={stats.tagReleaseFrequency} />
         <RepositorySizeLargest data={stats.largestRepos} />
+      </div>
+
+      {/* Security & Settings */}
+      <div style={dashboardGridStyle}>
+        <SecurityAdoption data={stats.securityData} />
+        <SettingsAdoption data={stats.settingsData} />
+      </div>
+
+      {/* Organization Repository Distribution - Full Width */}
+      <OrganizationRepositoryDistribution data={stats.orgData} />
+
+      {/* Actions */}
+      <div style={dashboardGridStyle}>
+        <ActionsUsage data={stats.actionsData} />
+      </div>
+
+      {/* Community Health & Features */}
+      <div style={dashboardGridStyle}>
+        <CommunityHealth data={stats.communityHealthData} />
+        <CommunityFeatures data={stats.communityFeaturesData} />
+      </div>
+
+      {/* Topics & Traffic */}
+      <div style={dashboardGridStyle}>
+        <TopicsDistribution data={stats.topicsData} />
+        <TrafficAnalytics data={stats.trafficData} />
       </div>
 
       {/* Tables grid */}
@@ -493,6 +864,7 @@ export function OrganizationRepositoryDistribution({
       }}
       formatter={(value: ValueType) => formatNumber(Number(value))}
       margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+      fullWidth
     />
   );
 }

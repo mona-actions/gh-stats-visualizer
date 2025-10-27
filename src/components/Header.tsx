@@ -42,7 +42,15 @@ export default function Header({ onReset }: HeaderProps) {
       >
         <div style={{ display: "flex", alignItems: "center" }}>
           <GitHubLogo size={32} style={{ marginRight: "16px" }} />
-          <div style={{ fontWeight: "bold", fontSize: "18px", color: "white" }}>
+          <div 
+            style={{ 
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"',
+              fontWeight: 600,
+              fontSize: "18px", 
+              color: "#f0f6fc",
+              letterSpacing: "-0.01em",
+            }}
+          >
             GitHub Stats Analyzer
           </div>
         </div>
@@ -58,6 +66,7 @@ export default function Header({ onReset }: HeaderProps) {
             cursor: "pointer",
             fontWeight: "500",
             height: "32px",
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif',
           }}
         >
           Upload New File

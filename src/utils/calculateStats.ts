@@ -1,369 +1,627 @@
 /**
  * calculateStats.ts
  *
- * Provides functions for calculating repository statistics and collaboration metrics from an array of Repository objects.
- * Includes calculation of basic stats, activity, size, update frequency, organization distribution, and collaboration features.
+ * Calculates all relevant repository and organization statistics for visualization.
+ * Performs a single-pass aggregation for performance, including activity, size, update frequency, organization, collaboration, and more.
  */
 
-import type { Stats, Repository } from "@types";
-
-/**
- * Structure of collaboration statistics for repositories.
- * - collaboratorDistribution: Distribution of repos by collaborator count ranges.
- * - topCollaboratorRepos: Top repos by collaborator count.
- * - featureDistribution: Distribution of feature usage (issues, PRs, etc.).
- */
-export interface CollaborationStats {
-  collaboratorDistribution: {
-    range: string;
-    count: number;
-  }[];
-  topCollaboratorRepos: {
-    name: string;
-    collaboratorCount: number;
-  }[];
-  featureDistribution: {
-    feature: string;
-    count: number;
-    total: number;
-  }[];
-}
+import type { Stats, Repository, OrgStats } from "../types";
 
 /**
- * Calculates collaboration statistics for a set of repositories.
- * @param repos - Array of Repository objects.
- * @returns CollaborationStats object with collaborator and feature distributions.
+ * Calculates repository and organization statistics for dashboard display.
+ * Performs a single-pass aggregation for performance, including activity, size, update frequency, organization, collaboration, and more.
+ *
+ * @param data - Array of Repository objects from gh-github-stats.
+ * @param orgs - Optional array of organization stats from gh-github-stats.
+ * @returns Stats object with all calculated metrics for the dashboard.
  */
-export function calculateCollaborationStats(
-  repos: Repository[]
-): CollaborationStats {
-  // Calculate collaborator distribution ranges
+export default function calculateStats(data: Repository[], orgs?: OrgStats[]): Stats {
+  // Initialize all counters and aggregators
+  const basic = {
+    totalRepos: data.length,
+    totalSize: 0,
+    totalIssues: 0,
+    totalPRs: 0,
+    totalCommitComments: 0,
+    totalMilestones: 0,
+    totalReleases: 0,
+    totalCollaborators: 0,
+    totalProtectedBranches: 0,
+    totalProjects: 0,
+    totalTags: 0,
+    totalIssueComments: 0,
+    totalPRReviewComments: 0,
+    totalBranches: 0,
+    totalDiscussions: 0,
+    totalPRReviews: 0,
+    totalIssueEvents: 0,
+    totalWikis: 0,
+    totalForks: 0,
+    totalArchived: 0,
+    totalEmpty: 0
+  };
+
+  // Initialize aggregation objects
+  const activityLevels = {
+    "No activity": 0,
+    "Low activity": 0,
+    "Medium activity": 0,
+    "High activity": 0,
+    "Very high activity": 0,
+  };
+  
+  // Security tracking
+  const securityStats = {
+    dependabotEnabled: 0,
+    secretScanningEnabled: 0,
+    pushProtectionEnabled: 0,
+    total: 0,
+  };
+  
+  // Language tracking
+  const languageMap = new Map<string, number>();
+  
+  // Traffic tracking
+  const reposWithTraffic: Array<{ name: string; views: number; clones: number; viewsUniques: number; clonesUniques: number }> = [];
+  
+  // Topics tracking
+  const topicsMap = new Map<string, number>();
+  
+  // License tracking
+  const licenseMap = new Map<string, number>();
+  
+  // Settings tracking
+  const settingsStats = {
+    issuesEnabled: 0,
+    projectsEnabled: 0,
+    discussionsEnabled: 0,
+    wikiEnabled: 0,
+    total: 0,
+  };
+  
+  // Actions tracking
+  const reposWithActions: Array<{ name: string; workflows: number; secrets: number; variables: number; runners: number }> = [];
+  
+  // Issues/PRs detailed tracking
+  let totalOpenIssues = 0;
+  let totalClosedIssues = 0;
+  let totalOpenPRs = 0;
+  let totalClosedPRs = 0;
+  let totalMergedPRs = 0;
+  let totalLabels = 0;
+  
+  // Community & other tracking
+  const reposWithHealth: Array<{ name: string; health: number }> = [];
+  let reposWithReadme = 0;
+  let reposWithCodeOfConduct = 0;
+  let reposWithContributing = 0;
+  let reposWithLicenseFile = 0;
+  let reposWithLFS = 0;
+  let reposWithPackages = 0;
+  
+  // Deployments & webhooks tracking
+  let totalDeployments = 0;
+  let totalEnvironments = 0;
+  let totalWebhooks = 0;
+  let totalRulesets = 0;
+  let activeWebhooks = 0;
+
+  const sizeGroups = {
+    "Less than 1 MB": 0,
+    "1–10 MB": 0,
+    "10–100 MB": 0,
+    "100–1000 MB": 0,
+    "More than 1000 MB": 0,
+  };
+
+  const updateBuckets: Record<string, number> = {
+    "Past week": 0,
+    "Past month": 0,
+    "Past 3 months": 0,
+    "Past year": 0,
+    "1-2 years ago": 0,
+    "2+ years ago": 0,
+  };
+
+  const branchGroups = {
+    "Single branch": 0,
+    "2–5 branches": 0,
+    "6–10 branches": 0,
+    "More than 10 branches": 0,
+  };
+
+  const orgMap = new Map<string, number>();
+  const yearMap = new Map<number, number>();
+  
+  // For sorting operations later
+  const reposBySize: {name: string; value: number}[] = [];
+  const reposByActivity: {name: string; issues: number; prs: number; total: number}[] = [];
+  const reposByAge: {name: string; created: Date; ageInDays: number; ageInYears: number}[] = [];
+  const reposByLastPush: {name: string; lastPush: Date}[] = [];
+  
+  // For collaboration stats
   const collaboratorRanges = [
-    { min: 0, max: 1, label: "0-1" },
-    { min: 2, max: 5, label: "2-5" },
-    { min: 6, max: 10, label: "6-10" },
-    { min: 11, max: 20, label: "11-20" },
-    { min: 21, max: Infinity, label: "21+" },
+    { min: 0, max: 1, label: "0-1", count: 0 },
+    { min: 2, max: 5, label: "2-5", count: 0 },
+    { min: 6, max: 10, label: "6-10", count: 0 },
+    { min: 11, max: 20, label: "11-20", count: 0 },
+    { min: 21, max: Infinity, label: "21+", count: 0 },
   ];
 
-  const collaboratorDistribution = collaboratorRanges.map((range) => ({
-    range: range.label,
-    count: repos.filter(
-      (repo) =>
-        (repo.Collaborator_Count || 0) >= range.min &&
-        (repo.Collaborator_Count || 0) <= range.max
-    ).length,
-  }));
-
-  // Get top repos by collaborator count
-  const topCollaboratorRepos = [...repos]
-    .sort((a, b) => (b.Collaborator_Count || 0) - (a.Collaborator_Count || 0))
-    .slice(0, 10)
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      collaboratorCount: repo.Collaborator_Count || 0,
-    }));
-
-  // Calculate feature distribution
-  const featureDistribution = [
-    {
-      feature: "Issues",
-      count: repos.filter((repo) => (repo.Issue_Count || 0) > 0).length,
-      total: repos.length,
-    },
-    {
-      feature: "Pull Requests",
-      count: repos.filter((repo) => (repo.Pull_Request_Count || 0) > 0).length,
-      total: repos.length,
-    },
-    {
-      feature: "Discussions",
-      count: repos.filter((repo) => (repo.Discussion_Count || 0) > 0).length,
-      total: repos.length,
-    },
-    {
-      feature: "Projects",
-      count: repos.filter((repo) => (repo.Project_Count || 0) > 0).length,
-      total: repos.length,
-    },
-    {
-      feature: "Wiki",
-      count: repos.filter((repo) => (repo.Has_Wiki || 0) > 0).length,
-      total: repos.length,
-    },
-    {
-      feature: "Protected Branches",
-      count: repos.filter((repo) => (repo.Protected_Branch_Count || 0) > 0)
-        .length,
-      total: repos.length,
-    },
-    {
-      feature: "Milestones",
-      count: repos.filter((repo) => (repo.Milestone_Count || 0) > 0).length,
-      total: repos.length,
-    },
-  ].filter((feature) => feature.count > 0); // Only include features with non-zero counts
-
-  return {
-    collaboratorDistribution,
-    topCollaboratorRepos,
-    featureDistribution,
-  };
-}
-
-/**
- * Calculates a wide range of repository statistics from an array of Repository objects.
- * Includes basic stats, activity, size, update frequency, org distribution, year data, branch data, largest/active repos, and collaboration stats.
- *
- * @param repos - Array of Repository objects.
- * @returns Stats object with all calculated metrics.
- */
-export function calculateStats(repos: Repository[]): Stats {
-  const basic = {
-    totalRepos: repos.length,
-    totalSize: repos.reduce((sum, repo) => sum + (repo.Repo_Size_MB || 0), 0),
-    totalIssues: repos.reduce((sum, repo) => sum + (repo.Issue_Count || 0), 0),
-    totalPRs: repos.reduce(
-      (sum, repo) => sum + (repo.Pull_Request_Count || 0),
-      0
-    ),
-    totalCommitComments: repos.reduce(
-      (sum, repo) => sum + (repo.Commit_Comment_Count || 0),
-      0
-    ),
-    totalMilestones: repos.reduce(
-      (sum, repo) => sum + (repo.Milestone_Count || 0),
-      0
-    ),
-    totalReleases: repos.reduce(
-      (sum: number, repo) => sum + (repo.Release_Count || 0),
-      0
-    ),
-    totalCollaborators: repos.reduce(
-      (sum: number, repo) => sum + (repo.Collaborator_Count || 0),
-      0
-    ),
-    totalProtectedBranches: repos.reduce(
-      (sum: number, repo) => sum + (repo.Protected_Branch_Count || 0),
-      0
-    ),
-    totalProjects: repos.reduce(
-      (sum: number, repo) => sum + (repo.Project_Count || 0),
-      0
-    ),
-    totalTags: repos.reduce(
-      (sum: number, repo) => sum + (repo.Tag_Count || 0),
-      0
-    ),
-    totalIssueComments: repos.reduce(
-      (sum: number, repo) => sum + (repo.Issue_Comment_Count || 0),
-      0
-    ),
-    totalPRReviewComments: repos.reduce(
-      (sum: number, repo) => sum + (repo.PR_Review_Comment_Count || 0),
-      0
-    ),
-    totalBranches: repos.reduce(
-      (sum: number, repo) => sum + (repo.Branch_Count || 0),
-      0
-    ),
-    totalDiscussions: repos.reduce(
-      (sum: number, repo) => sum + (repo.Discussion_Count || 0),
-      0
-    ),
-    totalPRReviews: repos.reduce(
-      (sum: number, repo) => sum + (repo.PR_Review_Count || 0),
-      0
-    ),
-    totalIssueEvents: repos.reduce(
-      (sum: number, repo) => sum + (repo.Issue_Event_Count || 0),
-      0
-    ),
-    totalWikis: repos.reduce(
-      (sum: number, repo) => sum + (repo.Has_Wiki || 0),
-      0
-    ),
-    totalForks: repos.filter((repo) => repo.Is_Fork).length,
-    totalArchived: repos.filter((repo) => repo.Is_Archived).length,
-    totalEmpty: repos.filter((repo) => repo.Is_Empty).length,
+  const featureCounts = {
+    issues: 0,
+    pullRequests: 0,
+    discussions: 0,
+    projects: 0,
+    wiki: 0,
+    protectedBranches: 0,
+    milestones: 0,
   };
 
-  // Calculate activity data
-  const activityData = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      value: (repo.Issue_Count || 0) + (repo.Pull_Request_Count || 0),
-    }))
-    .sort((a, b) => b.value - a.value);
+  const now = new Date();
 
-  // Calculate size data
-  const sizeData = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      value: repo.Repo_Size_MB || 0,
-    }))
-    .sort((a, b) => b.value - a.value);
+  // Single pass through the data
+  data.forEach(repo => {
+    // Basic counters
+    const repoSize = repo.Repo_Size_MB || 0;
+    const issueCount = repo.Issue_Count || 0;
+    const prCount = repo.Pull_Request_Count || 0;
+    const activity = issueCount + prCount;
+    
+    // Update basic stats
+    basic.totalSize += repoSize;
+    basic.totalIssues += issueCount;
+    basic.totalPRs += prCount;
+    basic.totalCommitComments += repo.Commit_Comment_Count || 0;
+    basic.totalMilestones += repo.Milestone_Count || 0;
+    basic.totalReleases += repo.Release_Count || 0;
+    basic.totalCollaborators += repo.Collaborator_Count || 0;
+    basic.totalProtectedBranches += repo.Protected_Branch_Count || 0;
+    basic.totalProjects += repo.Project_Count || 0;
+    basic.totalTags += repo.Tag_Count || 0;
+    basic.totalIssueComments += repo.Issue_Comment_Count || 0;
+    basic.totalPRReviewComments += repo.PR_Review_Comment_Count || 0;
+    basic.totalBranches += repo.Branch_Count || 0;
+    basic.totalDiscussions += repo.Discussion_Count || 0;
+    basic.totalPRReviews += repo.PR_Review_Count || 0;
+    basic.totalIssueEvents += repo.Issue_Event_Count || 0;
+    basic.totalWikis += repo.Has_Wiki || 0;
+    
+    if (repo.Is_Fork) basic.totalForks++;
+    if (repo.Is_Archived) basic.totalArchived++;
+    if (repo.Is_Empty) basic.totalEmpty++;
 
-  // Calculate update data
-  const updateData = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      value: new Date(repo.Last_Push || "").getTime(),
-    }))
-    .sort((a, b) => b.value - a.value);
-
-  // Calculate org data
-  const orgMap = new Map<string, number>();
-  repos.forEach((repo) => {
-    const org = repo.Org_Name || "Unknown";
-    orgMap.set(org, (orgMap.get(org) || 0) + 1);
+    // Repository name for display
+    const repoName = `${repo.Org_Name}/${repo.Repo_Name}`;
+    
+    // Activity levels
+    if (activity === 0) activityLevels["No activity"]++;
+    else if (activity < 10) activityLevels["Low activity"]++;
+    else if (activity < 100) activityLevels["Medium activity"]++;
+    else if (activity < 1000) activityLevels["High activity"]++;
+    else activityLevels["Very high activity"]++;
+    
+    // Size groups
+    if (repoSize < 1) sizeGroups["Less than 1 MB"]++;
+    else if (repoSize < 10) sizeGroups["1–10 MB"]++;
+    else if (repoSize < 100) sizeGroups["10–100 MB"]++;
+    else if (repoSize < 1000) sizeGroups["100–1000 MB"]++;
+    else sizeGroups["More than 1000 MB"]++;
+    
+    // Organization counts
+    const orgName = repo.Org_Name || "Unknown";
+    orgMap.set(orgName, (orgMap.get(orgName) || 0) + 1);
+    
+    // Branch distribution
+    const branches = repo.Branch_Count || 0;
+    if (branches <= 1) branchGroups["Single branch"]++;
+    else if (branches <= 5) branchGroups["2–5 branches"]++;
+    else if (branches <= 10) branchGroups["6–10 branches"]++;
+    else branchGroups["More than 10 branches"]++;
+    
+    // Year data
+    if (repo.Created) {
+      const created = new Date(repo.Created);
+      const year = created.getFullYear();
+      yearMap.set(year, (yearMap.get(year) || 0) + 1);
+      
+      // Calculate age
+      const ageInDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+      const ageInYears = ageInDays / 365;
+      
+      reposByAge.push({
+        name: repoName,
+        created,
+        ageInDays,
+        ageInYears: parseFloat(ageInYears.toFixed(1))
+      });
+    }
+    
+    // Update frequency
+    if (repo.Last_Push) {
+      const lastPush = new Date(repo.Last_Push);
+      reposByLastPush.push({ name: repoName, lastPush });
+      
+      const days = (now.getTime() - lastPush.getTime()) / (1000 * 60 * 60 * 24);
+      if (days < 7) updateBuckets["Past week"]++;
+      else if (days < 30) updateBuckets["Past month"]++;
+      else if (days < 90) updateBuckets["Past 3 months"]++;
+      else if (days < 365) updateBuckets["Past year"]++;
+      else if (days < 730) updateBuckets["1-2 years ago"]++;
+      else updateBuckets["2+ years ago"]++;
+    }
+    
+    // Add to arrays for sorting later
+    reposBySize.push({ name: repoName, value: repoSize });
+    
+    reposByActivity.push({
+      name: repoName,
+      issues: issueCount,
+      prs: prCount,
+      total: activity
+    });
+    
+    // Collaborator ranges
+    const collaboratorCount = repo.Collaborator_Count || 0;
+    for (const range of collaboratorRanges) {
+      if (collaboratorCount >= range.min && collaboratorCount <= range.max) {
+        range.count++;
+        break;
+      }
+    }
+    
+    // Feature distribution
+    if (issueCount > 0) featureCounts.issues++;
+    if (prCount > 0) featureCounts.pullRequests++;
+    if ((repo.Discussion_Count || 0) > 0) featureCounts.discussions++;
+    if ((repo.Project_Count || 0) > 0) featureCounts.projects++;
+    if ((repo.Has_Wiki || 0) > 0) featureCounts.wiki++;
+    if ((repo.Protected_Branch_Count || 0) > 0) featureCounts.protectedBranches++;
+    if ((repo.Milestone_Count || 0) > 0) featureCounts.milestones++;
+    
+    // Security stats
+    if (repo.Dependabot_Enabled) securityStats.dependabotEnabled++;
+    if (repo.Secret_Scanning_Enabled) securityStats.secretScanningEnabled++;
+    if (repo.Secret_Scanning_Push_Protection) securityStats.pushProtectionEnabled++;
+    securityStats.total++;
+    
+    // Language stats
+    if (repo.Primary_Language) {
+      languageMap.set(repo.Primary_Language, (languageMap.get(repo.Primary_Language) || 0) + 1);
+    }
+    
+    // Traffic stats
+    const viewsCount = repo.Views_Count || 0;
+    const clonesCount = repo.Clones_Count || 0;
+    if (viewsCount > 0 || clonesCount > 0) {
+      reposWithTraffic.push({
+        name: repoName,
+        views: viewsCount,
+        clones: clonesCount,
+        viewsUniques: repo.Views_Uniques || 0,
+        clonesUniques: repo.Clones_Uniques || 0,
+      });
+    }
+    
+    // Topics stats
+    if (repo.Topics) {
+      try {
+        const topics: string[] = JSON.parse(repo.Topics);
+        topics.forEach(topic => {
+          topicsMap.set(topic, (topicsMap.get(topic) || 0) + 1);
+        });
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+    
+    // License stats
+    if (repo.License_Key) {
+      licenseMap.set(repo.License_Key, (licenseMap.get(repo.License_Key) || 0) + 1);
+    }
+    
+    // Settings stats
+    if (repo.Issues_Enabled) settingsStats.issuesEnabled++;
+    if (repo.Projects_Enabled) settingsStats.projectsEnabled++;
+    if (repo.Discussions_Enabled) settingsStats.discussionsEnabled++;
+    if (repo.Has_Wiki) settingsStats.wikiEnabled++;
+    settingsStats.total++;
+    
+    // Actions stats
+    const workflows = repo.Workflows_Count || 0;
+    const secrets = repo.Secrets_Count || 0;
+    const variables = repo.Variables_Count || 0;
+    const runners = repo.Runners_Count || 0;
+    if (workflows > 0 || secrets > 0 || variables > 0 || runners > 0) {
+      reposWithActions.push({
+        name: repoName,
+        workflows,
+        secrets,
+        variables,
+        runners,
+      });
+    }
+    
+    // Issues/PRs detailed stats
+    totalOpenIssues += repo.Open_Issues || 0;
+    totalClosedIssues += repo.Closed_Issues || 0;
+    totalOpenPRs += repo.Open_PRs || 0;
+    totalClosedPRs += repo.Closed_PRs || 0;
+    totalMergedPRs += repo.Merged_PRs || 0;
+    totalLabels += repo.Labels_Count || 0;
+    
+    // Community & other stats
+    if (repo.Health_Percentage) {
+      reposWithHealth.push({
+        name: repoName,
+        health: repo.Health_Percentage,
+      });
+    }
+    if (repo.Has_Readme) reposWithReadme++;
+    if (repo.Has_Code_Of_Conduct) reposWithCodeOfConduct++;
+    if (repo.Has_Contributing) reposWithContributing++;
+    if (repo.Has_License_File) reposWithLicenseFile++;
+    if (repo.Git_LFS_Enabled) reposWithLFS++;
+    if ((repo.Packages_Count || 0) > 0) reposWithPackages++;
+    
+    // Deployments & webhooks stats
+    totalDeployments += repo.Deployments_Count || 0;
+    totalEnvironments += repo.Environments_Count || 0;
+    totalWebhooks += repo.Webhooks_Count || 0;
+    totalRulesets += repo.Rulesets_Count || 0;
+    
+    // Count active webhooks
+    if (repo.Webhooks) {
+      try {
+        const webhooks = JSON.parse(repo.Webhooks);
+        if (Array.isArray(webhooks)) {
+          activeWebhooks += webhooks.filter((w: any) => w.active).length;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
   });
-  const orgData = Array.from(orgMap.entries()).map(([name, value]) => ({
+  
+  // Sort and slice arrays after the single pass
+  reposBySize.sort((a, b) => b.value - a.value);
+  reposByActivity.sort((a, b) => b.total - a.total);
+  reposByAge.sort((a, b) => b.ageInDays - a.ageInDays);
+  reposByLastPush.sort((a, b) => b.lastPush.getTime() - a.lastPush.getTime());
+  
+  const largestRepos = reposBySize.slice(0, 10);
+  const mostActiveRepos = reposByActivity.slice(0, 10);
+  const oldestRepos = [...reposByAge].sort((a, b) => a.created.getTime() - b.created.getTime()).slice(0, 20)
+    .map(r => ({ name: r.name, created: r.created.toLocaleDateString() }));
+  const newestRepos = [...reposByAge].sort((a, b) => b.created.getTime() - a.created.getTime()).slice(0, 20)
+    .map(r => ({ name: r.name, created: r.created.toLocaleDateString() }));
+  const recentlyUpdated = reposByLastPush.slice(0, 20)
+    .map(r => ({ name: r.name, lastPush: r.lastPush.toLocaleDateString() }));
+
+  // Convert maps to arrays
+  const yearData = Array.from(yearMap.entries())
+    .map(([year, count]) => ({ year, count }))
+    .sort((a, b) => a.year - b.year);
+  
+  const orgData = Array.from(orgMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  // Format activity data
+  const activityData = Object.entries(activityLevels).map(([name, value]) => ({
     name,
     value,
   }));
 
-  // Calculate year data
-  const yearMap = new Map<number, number>();
-  repos.forEach((repo) => {
-    const year = new Date(repo.Created || "").getFullYear();
-    yearMap.set(year, (yearMap.get(year) || 0) + 1);
-  });
-  const yearData = Array.from(yearMap.entries())
-    .map(([year, count]) => ({ year, count }))
-    .sort((a, b) => a.year - b.year);
+  // Format update data
+  const updateData = Object.entries(updateBuckets).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
-  // Calculate branch data
-  const branchData = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      value: repo.Branch_Count || 0,
-    }))
-    .sort((a, b) => b.value - a.value);
+  // Format size data
+  const sizeData = Object.entries(sizeGroups).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
-  // Calculate largest repos
-  const largestRepos = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      value: repo.Repo_Size_MB || 0,
+  // Format branch data
+  const branchData = Object.entries(branchGroups).map(([name, value]) => ({
+    name,
+    value,
+  }));
+
+  // Format collaboration stats
+  const collaboratorDistribution = collaboratorRanges.map(range => ({
+    range: range.label,
+    count: range.count
+  }));
+
+  // Calculate top collaborator repos
+  const topCollaboratorRepos = data
+    .map(repo => ({
+      name: `${repo.Org_Name}/${repo.Repo_Name}`,
+      collaboratorCount: repo.Collaborator_Count || 0
     }))
-    .sort((a, b) => b.value - a.value)
+    .sort((a, b) => b.collaboratorCount - a.collaboratorCount)
     .slice(0, 10);
 
-  // Calculate most active repos
-  const mostActiveRepos = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      issues: repo.Issue_Count || 0,
-      prs: repo.Pull_Request_Count || 0,
-      total: (repo.Issue_Count || 0) + (repo.Pull_Request_Count || 0),
-    }))
+  // Format feature distribution
+  const featureDistribution = [
+    { feature: "Issues", count: featureCounts.issues, total: data.length },
+    { feature: "Pull Requests", count: featureCounts.pullRequests, total: data.length },
+    { feature: "Discussions", count: featureCounts.discussions, total: data.length },
+    { feature: "Projects", count: featureCounts.projects, total: data.length },
+    { feature: "Wiki", count: featureCounts.wiki, total: data.length },
+    { feature: "Protected Branches", count: featureCounts.protectedBranches, total: data.length },
+    { feature: "Milestones", count: featureCounts.milestones, total: data.length },
+  ].filter(feature => feature.count > 0);
+
+  // Calculate more complex metrics that require multiple fields
+  const metadataRatios = data
+    .map(repo => {
+      const size = repo.Repo_Size_MB || 0;
+      const metadata = (repo.Issue_Count || 0) + 
+                      (repo.Pull_Request_Count || 0) + 
+                      (repo.Commit_Comment_Count || 0);
+      
+      return {
+        name: `${repo.Org_Name}/${repo.Repo_Name}`,
+        size,
+        metadata,
+        ratio: metadata === 0 ? 0 : size / metadata
+      };
+    })
+    .filter(r => r.size > 0 && r.metadata > 0)
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 10);
+
+  // Branch complexity calculations
+  const branchComplexity = data
+    .filter(r => r.Branch_Count && r.Created)
+    .map(r => {
+      const branches = r.Branch_Count!;
+      const size = r.Repo_Size_MB || 1;
+      const created = new Date(r.Created!);
+      const ageYears = Math.max(
+        1,
+        (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24 * 365)
+      );
+
+      return {
+        name: `${r.Org_Name}/${r.Repo_Name}`,
+        branches,
+        size,
+        age: ageYears.toFixed(1),
+        complexityBySize: branches / size,
+        complexityByAge: branches / ageYears,
+      };
+    })
+    .sort((a, b) => b.complexityBySize - a.complexityBySize)
+    .slice(0, 10);
+
+  // Tag release frequency calculations
+  const tagReleaseFrequency = data
+    .filter(r => (r.Tag_Count || 0) > 0 || (r.Release_Count || 0) > 0)
+    .map(r => {
+      const tags = r.Tag_Count || 0;
+      const releases = r.Release_Count || 0;
+      const created = new Date(r.Created || new Date());
+      const ageYears = Math.max(
+        1,
+        (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24 * 365)
+      );
+
+      return {
+        name: `${r.Org_Name}/${r.Repo_Name}`,
+        tags,
+        releases,
+        age: ageYears.toFixed(1),
+        tagsPerYear: tags / ageYears,
+        releasesPerYear: releases / ageYears,
+        total: (tags + releases) / ageYears,
+      };
+    })
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
-  // Calculate newest repos
-  const newestRepos = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      created: repo.Created || "",
-    }))
-    .sort(
-      (a, b) => new Date(b.created).getTime() - new Date(a.created).getTime()
-    )
-    .slice(0, 20);
+  const repositoryAge = reposByAge
+    .sort((a, b) => b.ageInDays - a.ageInDays)
+    .slice(0, 10)
+    .map(r => ({
+      name: r.name,
+      ageInDays: r.ageInDays,
+      ageInYears: r.ageInYears
+    }));
 
-  // Calculate oldest repos
-  const oldestRepos = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      created: repo.Created || "",
-    }))
-    .sort(
-      (a, b) => new Date(a.created).getTime() - new Date(b.created).getTime()
-    )
-    .slice(0, 20);
+  // Process security data
+  const securityData = [
+    { name: "Dependabot", enabled: securityStats.dependabotEnabled, disabled: securityStats.total - securityStats.dependabotEnabled },
+    { name: "Secret Scanning", enabled: securityStats.secretScanningEnabled, disabled: securityStats.total - securityStats.secretScanningEnabled },
+    { name: "Push Protection", enabled: securityStats.pushProtectionEnabled, disabled: securityStats.total - securityStats.pushProtectionEnabled },
+  ];
+  
+  // Process language data (top 10)
+  const languageData = Array.from(languageMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+  
+  // Process traffic data (top 10 by views)
+  const trafficData = reposWithTraffic
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 10);
+  
+  // Process topics data (top 15)
+  const topicsData = Array.from(topicsMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 15);
+  
+  // Process license data
+  const licenseData = Array.from(licenseMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+  
+  // Process settings data
+  const settingsData = [
+    { feature: "Issues", enabled: settingsStats.issuesEnabled, disabled: settingsStats.total - settingsStats.issuesEnabled },
+    { feature: "Projects", enabled: settingsStats.projectsEnabled, disabled: settingsStats.total - settingsStats.projectsEnabled },
+    { feature: "Discussions", enabled: settingsStats.discussionsEnabled, disabled: settingsStats.total - settingsStats.discussionsEnabled },
+    { feature: "Wiki", enabled: settingsStats.wikiEnabled, disabled: settingsStats.total - settingsStats.wikiEnabled },
+  ];
+  
+  // Process Actions data (top 10 by workflows)
+  const actionsData = reposWithActions
+    .sort((a, b) => (b.workflows + b.secrets + b.variables + b.runners) - (a.workflows + a.secrets + a.variables + a.runners))
+    .slice(0, 10);
+  
+  // Process community health data (top 10)
+  const communityHealthData = reposWithHealth
+    .sort((a, b) => b.health - a.health)
+    .slice(0, 10);
+  
+  // Aggregate issues/PRs data
+  const issuesPRsData = {
+    openIssues: totalOpenIssues,
+    closedIssues: totalClosedIssues,
+    openPRs: totalOpenPRs,
+    closedPRs: totalClosedPRs,
+    mergedPRs: totalMergedPRs,
+    totalLabels,
+  };
+  
+  // Community features data
+  const communityFeaturesData = {
+    reposWithReadme,
+    reposWithCodeOfConduct,
+    reposWithContributing,
+    reposWithLicenseFile,
+    reposWithLFS,
+    reposWithPackages,
+    totalDeployments,
+    totalEnvironments,
+    totalWebhooks,
+    activeWebhooks,
+    totalRulesets,
+    total: data.length,
+  };
 
-  // Calculate recently updated repos
-  const recentlyUpdated = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      lastPush: repo.Last_Push || "",
-    }))
-    .sort(
-      (a, b) => new Date(b.lastPush).getTime() - new Date(a.lastPush).getTime()
-    )
-    .slice(0, 20);
-
-  // Calculate metadata ratios
-  const metadataRatios = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      size: repo.Repo_Size_MB || 0,
-      metadata:
-        (repo.Issue_Count || 0) +
-        (repo.Pull_Request_Count || 0) +
-        (repo.Commit_Comment_Count || 0),
-      ratio:
-        ((repo.Issue_Count || 0) +
-          (repo.Pull_Request_Count || 0) +
-          (repo.Commit_Comment_Count || 0)) /
-        (repo.Repo_Size_MB || 1),
-    }))
-    .sort((a, b) => b.ratio - a.ratio);
-
-  // Calculate branch complexity
-  const branchComplexity = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      branches: repo.Branch_Count || 0,
-      size: repo.Repo_Size_MB || 0,
-      age: repo.Created || "",
-      complexityBySize: (repo.Branch_Count || 0) / (repo.Repo_Size_MB || 1),
-      complexityByAge:
-        (repo.Branch_Count || 0) /
-        (new Date().getTime() - new Date(repo.Created || "").getTime()),
-    }))
-    .sort((a, b) => b.complexityBySize - a.complexityBySize);
-
-  // Calculate tag release frequency
-  const tagReleaseFrequency = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      tags: repo.Tag_Count || 0,
-      releases: repo.Release_Count || 0,
-      age: repo.Created || "",
-      tagsPerYear:
-        (repo.Tag_Count || 0) /
-        ((new Date().getTime() - new Date(repo.Created || "").getTime()) /
-          (1000 * 60 * 60 * 24 * 365)),
-      releasesPerYear:
-        (repo.Release_Count || 0) /
-        ((new Date().getTime() - new Date(repo.Created || "").getTime()) /
-          (1000 * 60 * 60 * 24 * 365)),
-      total: (repo.Tag_Count || 0) + (repo.Release_Count || 0),
-    }))
-    .sort((a, b) => b.total - a.total);
-
-  // Calculate repository age
-  const repositoryAge = repos
-    .map((repo) => ({
-      name: repo.Repo_Name || "",
-      ageInDays: Math.floor(
-        (new Date().getTime() - new Date(repo.Created || "").getTime()) /
-          (1000 * 60 * 60 * 24)
-      ),
-      ageInYears: Math.floor(
-        (new Date().getTime() - new Date(repo.Created || "").getTime()) /
-          (1000 * 60 * 60 * 24 * 365)
-      ),
-    }))
-    .sort((a, b) => b.ageInDays - a.ageInDays);
-
-  // Calculate collaboration stats
-  const collaborationStats = calculateCollaborationStats(repos);
-
+  // Assemble and return the result
   return {
+    orgs,
+    repositories: data,
     basic,
+    securityData,
+    languageData,
+    trafficData,
+    topicsData,
+    licenseData,
+    settingsData,
+    actionsData,
+    issuesPRsData,
+    communityHealthData,
+    communityFeaturesData,
     activityData,
     sizeData,
     updateData,
@@ -379,6 +637,10 @@ export function calculateStats(repos: Repository[]): Stats {
     branchComplexity,
     tagReleaseFrequency,
     repositoryAge,
-    collaborationStats,
+    collaborationStats: {
+      collaboratorDistribution,
+      topCollaboratorRepos,
+      featureDistribution
+    }
   };
 }

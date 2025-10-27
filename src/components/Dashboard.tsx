@@ -5,10 +5,13 @@
  * Includes the summary header, dashboard section with charts/tables, and the footer.
  */
 
+import { useState, useMemo } from "react";
 import type { Stats } from "@types";
 import { containerStyle } from "@styles";
 
 import { DashboardSection, SummaryHeader } from "./Dashboard/Visualization";
+import { OrgSelector, OrgStatsSection } from "./Dashboard/OrgStats";
+import calculateStats from "../utils/calculateStats";
 import Footer from "./Footer";
 
 /**
@@ -27,13 +30,70 @@ interface DashboardProps {
  * @returns JSX element for the dashboard.
  */
 export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
+  const [selectedOrg, setSelectedOrg] = useState<string>("all");
+
+  // Check if we have org data
+  const hasOrgData = stats.orgs && stats.orgs.length > 0;
+
+  // Filter repositories by selected org and recalculate stats
+  const filteredStats = useMemo(() => {
+    if (selectedOrg === "all") {
+      return stats;
+    }
+
+    // Filter repositories to only those belonging to the selected org
+    const filteredRepos = stats.repositories.filter(
+      (repo) => repo.Org_Name === selectedOrg
+    );
+
+    // Recalculate stats for filtered repositories
+    return calculateStats(filteredRepos, stats.orgs);
+  }, [selectedOrg, stats]);
+
+  const separatorStyle: React.CSSProperties = {
+    borderTop: "1px solid #30363d",
+    marginTop: "32px",
+    marginBottom: "32px",
+  };
+
   return (
     <div style={containerStyle}>
+      {/* Organization Selector (at top) */}
+      {hasOrgData && (
+        <OrgSelector
+          orgs={stats.orgs!}
+          selectedOrg={selectedOrg}
+          onSelectOrg={setSelectedOrg}
+        />
+      )}
+
+      {/* Organization Stats Section */}
+      {hasOrgData && (
+        <>
+          <div style={separatorStyle} />
+          <SummaryHeader
+            title="Organization Statistics"
+            description={
+              selectedOrg === "all"
+                ? `Viewing ${stats.orgs!.length} organizations`
+                : undefined
+            }
+          />
+          <OrgStatsSection
+            orgs={stats.orgs!}
+            selectedOrg={selectedOrg}
+          />
+        </>
+      )}
+
+      {/* Repository Stats Section */}
+      <div style={separatorStyle} />
       <SummaryHeader
-        title={`Analysis of ${stats.basic.totalRepos.toLocaleString()} repositories`}
-        description={`Across ${stats.orgData.length} organizations`}
+        title="Repository Statistics"
+        description={`Analysis of ${filteredStats.basic.totalRepos.toLocaleString()} repositories${selectedOrg === "all" ? ` across ${filteredStats.orgData.length} organizations` : ""}`}
       />
-      <DashboardSection stats={stats} />
+      <DashboardSection stats={filteredStats} />
+      
       <Footer analyzeStart={analyzeStart} />
     </div>
   );

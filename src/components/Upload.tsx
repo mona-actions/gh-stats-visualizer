@@ -1,14 +1,14 @@
 /**
  * Upload.tsx
  *
- * Provides the Upload component for uploading and analyzing a GitHub repository CSV file.
- * Handles file selection, CSV parsing, error handling, and triggers analysis timing.
+ * Provides the Upload component for uploading and analyzing a GitHub repository JSON file.
+ * Handles file selection, parsing, error handling, and triggers analysis timing.
  */
 
 import React, { useState } from "react";
-import Papa from "papaparse";
-import type { Stats, Repository } from "@types";
-import parseCsvAndCalculateStats from "../utils/parseCsv";
+import type { Stats } from "@types";
+import calculateStats from "../utils/calculateStats";
+import { parseGhGithubStatsJson } from "../utils/parseJson";
 
 /**
  * Props for the Upload component.
@@ -48,13 +48,13 @@ export default function Upload({
   };
 
   /**
-   * Handles the Analyze button click, triggers analysis timing, parses CSV, and calls onStatsReady.
+   * Handles the Analyze button click, triggers analysis timing, parses JSON, and calls onStatsReady.
    * @returns void
    */
   const handleAnalyzeClick = async () => {
     if (onAnalyzeStart) onAnalyzeStart();
     if (!file) {
-      setError("Please select a CSV file first.");
+      setError("Please select a JSON file first.");
       return;
     }
 
@@ -63,34 +63,14 @@ export default function Upload({
 
     try {
       const text = await file.text();
-      const parsed = Papa.parse<Repository>(text, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-        transform: (value, field) => {
-          if (["Has_Wiki"].includes(String(field))) {
-            return value === "True" ? 1 : 0;
-          }
-          if (
-            ["Is_Empty", "Is_Fork", "Is_Archived", "Migration_Issue"].includes(
-              String(field)
-            )
-          ) {
-            return String(value).toLowerCase() === "true";
-          }
-          return value;
-        },
-      });
-
-      if (parsed.errors.length > 0) {
-        throw new Error(parsed.errors[0].message);
-      }
-
-      const stats = parseCsvAndCalculateStats(parsed.data);
+      const jsonData = JSON.parse(text);
+      const parsed = parseGhGithubStatsJson(jsonData);
+      
+      const stats = calculateStats(parsed.repos, parsed.orgs);
       onStatsReady(stats);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError("Failed to parse and process CSV file.");
+        setError(`Failed to parse JSON file: ${err.message}`);
       }
     } finally {
       setLoading(false);
@@ -116,7 +96,7 @@ export default function Upload({
           fontWeight: 600,
         }}
       >
-        Upload a CSV file
+        Upload Repository Data
       </div>
 
       {error && (
@@ -142,7 +122,8 @@ export default function Upload({
           fontSize: "14px",
         }}
       >
-        Import your GitHub organization's stats data to visualize key metrics and insights
+        Import your GitHub organization's stats data from gh-github-stats to visualize 
+        key metrics, organization details, and repository insights.
       </p>
 
       <div
@@ -175,7 +156,7 @@ export default function Upload({
           Choose File
           <input
             type="file"
-            accept=".csv"
+            accept=".json"
             onChange={handleFileChange}
             style={{ display: "none" }}
           />

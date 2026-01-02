@@ -5,14 +5,30 @@
  * Includes the summary header, dashboard section with charts/tables, and the footer.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import type { Stats } from "@types";
-import { containerStyle } from "@styles";
+import {
+  containerStyle,
+  tabContainerStyle,
+  tabButtonStyle,
+  activeTabStyle,
+} from "@styles";
 
 import { DashboardSection, SummaryHeader } from "./Dashboard/Visualization";
 import { OrgSelector, OrgStatsSection } from "./Dashboard/OrgStats";
+import MigrationWaveAnalyzer from "./Dashboard/MigrationWaveAnalyzer";
 import calculateStats from "../utils/calculateStats";
 import Footer from "./Footer";
+
+type TabType = "overview" | "migration";
+
+/**
+ * Tab configuration for dynamic rendering and navigation.
+ */
+const TABS: Array<{ id: TabType; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "migration", label: "Migration Wave Planner" },
+];
 
 /**
  * Props for the Dashboard component.
@@ -31,6 +47,21 @@ interface DashboardProps {
  */
 export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
   const [selectedOrg, setSelectedOrg] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const tabRefs = useRef<Record<TabType, HTMLButtonElement | null>>({
+    overview: null,
+    migration: null,
+  });
+
+  // Focus management: move focus to active tab after keyboard navigation
+  useEffect(() => {
+    // Only focus if the tab change wasn't triggered by a click (which already has focus)
+    // We use a small timeout to ensure the ref is updated after state change
+    const timeoutId = setTimeout(() => {
+      tabRefs.current[activeTab]?.focus();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [activeTab]);
 
   // Check if we have org data
   const hasOrgData = stats.orgs && stats.orgs.length > 0;
@@ -50,6 +81,36 @@ export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
     return calculateStats(filteredRepos, stats.orgs);
   }, [selectedOrg, stats]);
 
+  /**
+   * Handle keyboard navigation for tabs (Left/Right arrow keys).
+   * Follows WAI-ARIA tab pattern for accessible keyboard interaction.
+   * Dynamically calculates next/previous tab based on current position.
+   */
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const currentIndex = TABS.findIndex(tab => tab.id === activeTab);
+    let newIndex = currentIndex;
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      // Move to previous tab, wrap to end if at start
+      newIndex = currentIndex > 0 ? currentIndex - 1 : TABS.length - 1;
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      // Move to next tab, wrap to start if at end
+      newIndex = currentIndex < TABS.length - 1 ? currentIndex + 1 : 0;
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      newIndex = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      newIndex = TABS.length - 1;
+    }
+
+    if (newIndex !== currentIndex) {
+      setActiveTab(TABS[newIndex].id);
+    }
+  };
+
   const separatorStyle: React.CSSProperties = {
     borderTop: "1px solid #30363d",
     marginTop: "32px",
@@ -58,6 +119,28 @@ export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
 
   return (
     <div style={containerStyle}>
+      {/* Tab Navigation */}
+      <div style={tabContainerStyle} role="tablist" aria-label="Dashboard sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            ref={(el) => {
+              tabRefs.current[tab.id] = el;
+            }}
+            id={`${tab.id}-tab`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`${tab.id}-panel`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            style={activeTab === tab.id ? activeTabStyle : tabButtonStyle}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={handleTabKeyDown}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Organization Selector (at top) */}
       {hasOrgData && (
         <OrgSelector
@@ -67,33 +150,56 @@ export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
         />
       )}
 
-      {/* Organization Stats Section */}
-      {hasOrgData && (
-        <>
+      {/* Conditional Rendering based on Active Tab */}
+      {activeTab === "overview" ? (
+        <div
+          id="overview-panel"
+          role="tabpanel"
+          aria-labelledby="overview-tab"
+        >
+          <>
+          {/* Organization Stats Section */}
+          {hasOrgData && (
+            <>
+              <div style={separatorStyle} />
+              <SummaryHeader
+                title="Organization Statistics"
+                description={
+                  selectedOrg === "all"
+                    ? `Viewing ${stats.orgs!.length} organizations`
+                    : undefined
+                }
+              />
+              <OrgStatsSection
+                orgs={stats.orgs!}
+                selectedOrg={selectedOrg}
+              />
+            </>
+          )}
+
+          {/* Repository Stats Section */}
           <div style={separatorStyle} />
           <SummaryHeader
-            title="Organization Statistics"
-            description={
-              selectedOrg === "all"
-                ? `Viewing ${stats.orgs!.length} organizations`
-                : undefined
-            }
+            title="Repository Statistics"
+            description={`Analysis of ${filteredStats.basic.totalRepos.toLocaleString()} repositories${selectedOrg === "all" ? ` across ${filteredStats.orgData.length} organizations` : ""}`}
           />
-          <OrgStatsSection
-            orgs={stats.orgs!}
-            selectedOrg={selectedOrg}
-          />
-        </>
+          <DashboardSection stats={filteredStats} />
+          </>
+        </div>
+      ) : (
+        <div
+          id="migration-panel"
+          role="tabpanel"
+          aria-labelledby="migration-tab"
+        >
+          <>
+          {/* Migration Wave Planner Section */}
+          <div style={separatorStyle} />
+          <MigrationWaveAnalyzer repositories={filteredStats.repositories} />
+          </>
+        </div>
       )}
 
-      {/* Repository Stats Section */}
-      <div style={separatorStyle} />
-      <SummaryHeader
-        title="Repository Statistics"
-        description={`Analysis of ${filteredStats.basic.totalRepos.toLocaleString()} repositories${selectedOrg === "all" ? ` across ${filteredStats.orgData.length} organizations` : ""}`}
-      />
-      <DashboardSection stats={filteredStats} />
-      
       <Footer analyzeStart={analyzeStart} />
     </div>
   );

@@ -14,14 +14,38 @@ export const theme = {
   colors: {
     bg: "#0d1117",
     card: "#161b22",
+    cardDark: "#1c1f24",
     border: "#30363d",
     text: "#c9d1d9",
     accent: "#2f81f7",
     subtle: "#8b949e",
+    error: "#f85149",
+    warning: "#e3b341",
+    success: "#3fb950",
+    info: "#58a6ff",
   },
   space: { xs: 4, sm: 8, md: 16, lg: 24 },
   radius: { sm: 6, md: 8 },
 };
+
+/**
+ * Size category color mapping for migration waves.
+ * Provides consistent color coding for small/medium/large repositories.
+ */
+export const sizeCategoryColors = {
+  small: {
+    bg: "#1a7f3714",
+    text: "#3fb950",
+  },
+  medium: {
+    bg: "#388bfd14",
+    text: "#58a6ff",
+  },
+  large: {
+    bg: "#db614514",
+    text: "#f85149",
+  },
+} as const;
 
 /**
  * Main container style for the dashboard layout.
@@ -244,4 +268,66 @@ export const dashboardGridStyle: CSSProperties = {
   gap: "24px",
   marginBottom: "24px",
   marginTop: "24px",
+};
+
+/**
+ * Tab navigation styles for the dashboard.
+ */
+export const tabContainerStyle: CSSProperties = {
+  display: "flex",
+  gap: theme.space.sm,
+  marginBottom: theme.space.lg,
+  borderBottom: `1px solid ${theme.colors.border}`,
+  paddingBottom: theme.space.sm,
+};
+
+export const tabButtonStyle: CSSProperties = {
+  backgroundColor: "transparent",
+  border: "none",
+  color: theme.colors.subtle,
+  fontSize: 14,
+  fontWeight: 500,
+  padding: `${theme.space.sm}px ${theme.space.md}px`,
+  cursor: "pointer",
+  borderRadius: `${theme.radius.sm}px ${theme.radius.sm}px 0 0`,
+  transition: "all 0.2s ease",
+};
+
+export const activeTabStyle: CSSProperties = {
+  ...tabButtonStyle,
+  color: theme.colors.accent,
+  backgroundColor: `${theme.colors.accent}15`,
+  borderBottom: `2px solid ${theme.colors.accent}`,
+};
+
+/**
+ * Input styles for threshold controls.
+ */
+export const inputLabelStyle: CSSProperties = {
+  display: "block",
+  color: theme.colors.text,
+  fontSize: 14,
+  fontWeight: 500,
+  marginBottom: theme.space.xs,
+};
+
+export const inputStyle: CSSProperties = {
+  backgroundColor: theme.colors.bg,
+  border: `1px solid ${theme.colors.border}`,
+  borderRadius: theme.radius.sm,
+  color: theme.colors.text,
+  fontSize: 14,
+  padding: `${theme.space.sm}px ${theme.space.md}px`,
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+export const inputGroupStyle: CSSProperties = {
+  display: "flex",
+  gap: theme.space.md,
+  marginBottom: theme.space.lg,
+};
+
+export const inputFieldStyle: CSSProperties = {
+  flex: 1,
 };

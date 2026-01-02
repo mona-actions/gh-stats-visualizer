@@ -6,10 +6,14 @@
  */
 
 import { useState, useMemo } from 'react';
-import type { Repository, ClassificationThresholds, MigrationWave } from '../../types';
+import type { Repository, ClassificationThresholds, MigrationWave, SizeCategory } from '../../types';
 import {
   generateMigrationWaves,
   DEFAULT_THRESHOLDS,
+  WAVE_SIZE_SMALL,
+  WAVE_SIZE_MEDIUM,
+  WAVE_SIZE_LARGE,
+  ORG_DEDICATED_WAVES_THRESHOLD,
 } from '../../utils/calculateMigrationWaves';
 import {
   cardStyle,
@@ -25,6 +29,7 @@ import {
   inputFieldStyle,
   dashboardGridStyle,
   theme,
+  sizeCategoryColors,
 } from '../../styles';
 import { GenericBarChart, GenericPieChart, GenericTable, CHART_COLORS } from '../Charts';
 import type { ValueType } from 'recharts/types/component/DefaultTooltipContent';
@@ -32,6 +37,13 @@ import { formatNumber } from '../Charts/Utils';
 
 interface MigrationWaveAnalyzerProps {
   repositories: Repository[];
+}
+
+/**
+ * Get colors for a size category badge.
+ */
+function getSizeCategoryColors(category: SizeCategory) {
+  return sizeCategoryColors[category];
 }
 
 /**
@@ -61,7 +73,7 @@ function ThresholdInput({
   label,
   value,
   onChange,
-  min,
+  min = 0,
   error,
 }: {
   label: string;
@@ -70,18 +82,44 @@ function ThresholdInput({
   min?: number;
   error?: boolean;
 }) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Only update if value is valid (positive number)
+    if (!isNaN(newValue) && newValue >= 0) {
+      onChange(newValue);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const newValue = Number(e.target.value);
+    // Ensure value is at least the minimum on blur
+    if (isNaN(newValue) || newValue < min) {
+      onChange(min);
+    }
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Select all text when input receives focus for easy replacement
+    e.target.select();
+  };
+
   return (
     <div style={inputFieldStyle}>
       <label style={inputLabelStyle}>{label}</label>
       <input
         type="number"
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        min={min || 0}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onFocus={handleFocus}
+        min={min}
+        step={100}
         style={{
           ...inputStyle,
-          borderColor: error ? '#f85149' : undefined,
+          borderColor: error ? theme.colors.error : undefined,
         }}
+        aria-invalid={error}
+        aria-describedby={error ? `${label}-error` : undefined}
       />
     </div>
   );
@@ -158,27 +196,30 @@ function WaveDetailCard({ wave }: { wave: MigrationWave }) {
                 </tr>
               </thead>
               <tbody>
-                {wave.repos.map((repo, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
-                    <td style={{ padding: '8px 12px', color: theme.colors.subtle }}>{idx + 1}</td>
-                    <td style={{ padding: '8px 12px', color: theme.colors.text }}>{repo.repoName}</td>
-                    <td style={{ padding: '8px 12px', color: theme.colors.subtle, fontSize: 12 }}>{repo.orgName}</td>
-                    <td style={{ padding: '8px 12px', color: theme.colors.text, textAlign: 'right' }}>{repo.sizeMB.toFixed(1)}</td>
-                    <td style={{ padding: '8px 12px', color: theme.colors.text, textAlign: 'right' }}>{repo.metadataRecords.toLocaleString()}</td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        backgroundColor: repo.sizeCategory === 'small' ? '#1a7f3714' : repo.sizeCategory === 'medium' ? '#388bfd14' : '#db614514',
-                        color: repo.sizeCategory === 'small' ? '#3fb950' : repo.sizeCategory === 'medium' ? '#58a6ff' : '#f85149',
-                      }}>
-                        {repo.sizeCategory}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {wave.repos.map((repo, idx) => {
+                  const colors = getSizeCategoryColors(repo.sizeCategory as SizeCategory);
+                  return (
+                    <tr key={idx} style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
+                      <td style={{ padding: '8px 12px', color: theme.colors.subtle }}>{idx + 1}</td>
+                      <td style={{ padding: '8px 12px', color: theme.colors.text }}>{repo.repoName}</td>
+                      <td style={{ padding: '8px 12px', color: theme.colors.subtle, fontSize: 12 }}>{repo.orgName}</td>
+                      <td style={{ padding: '8px 12px', color: theme.colors.text, textAlign: 'right' }}>{repo.sizeMB.toFixed(1)}</td>
+                      <td style={{ padding: '8px 12px', color: theme.colors.text, textAlign: 'right' }}>{repo.metadataRecords.toLocaleString()}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          backgroundColor: colors.bg,
+                          color: colors.text,
+                        }}>
+                          {repo.sizeCategory}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -208,7 +249,7 @@ function OrgSummary({ orgName, waves }: { orgName: string; waves: MigrationWave[
   };
 
   return (
-    <div style={{ ...cardStyle, padding: theme.space.lg, marginBottom: theme.space.lg, backgroundColor: '#1c1f24' }}>
+    <div style={{ ...cardStyle, padding: theme.space.lg, marginBottom: theme.space.lg, backgroundColor: theme.colors.cardDark }}>
       <h3 style={{ ...titleStyle, margin: 0, marginBottom: theme.space.sm, fontSize: 18 }}>
         {orgName}
       </h3>
@@ -237,11 +278,11 @@ function OrgSummary({ orgName, waves }: { orgName: string; waves: MigrationWave[
       <div style={{ marginTop: theme.space.md, paddingTop: theme.space.md, borderTop: `1px solid ${theme.colors.border}`, display: 'flex', gap: theme.space.lg, fontSize: 13 }}>
         <div>
           <span style={{ color: theme.colors.subtle }}>Small waves: </span>
-          <span style={{ color: CHART_COLORS.GREEN, fontWeight: 600 }}>{wavesByType.small}</span>
+          <span style={{ color: theme.colors.success, fontWeight: 600 }}>{wavesByType.small}</span>
         </div>
         <div>
           <span style={{ color: theme.colors.subtle }}>Medium waves: </span>
-          <span style={{ color: CHART_COLORS.BLUE, fontWeight: 600 }}>{wavesByType.medium}</span>
+          <span style={{ color: theme.colors.info, fontWeight: 600 }}>{wavesByType.medium}</span>
         </div>
         <div>
           <span style={{ color: theme.colors.subtle }}>Large waves: </span>
@@ -257,6 +298,19 @@ function OrgSummary({ orgName, waves }: { orgName: string; waves: MigrationWave[
  */
 export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAnalyzerProps) {
   const [thresholds, setThresholds] = useState<ClassificationThresholds>(DEFAULT_THRESHOLDS);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [waveSizeSmall, setWaveSizeSmall] = useState(WAVE_SIZE_SMALL);
+  const [waveSizeMedium, setWaveSizeMedium] = useState(WAVE_SIZE_MEDIUM);
+  const [waveSizeLarge, setWaveSizeLarge] = useState(WAVE_SIZE_LARGE);
+  const [orgThreshold, setOrgThreshold] = useState(ORG_DEDICATED_WAVES_THRESHOLD);
+
+  /**
+   * Helper function to update a single threshold value.
+   * Reduces code duplication and provides a centralized place for validation.
+   */
+  const updateThreshold = (key: keyof ClassificationThresholds, value: number) => {
+    setThresholds(prev => ({ ...prev, [key]: value }));
+  };
 
   // Validate thresholds
   const hasError = useMemo(() => {
@@ -270,12 +324,17 @@ export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAna
   const result = useMemo(() => {
     if (hasError) return null;
     try {
-      return generateMigrationWaves(repositories, thresholds);
+      return generateMigrationWaves(repositories, thresholds, {
+        waveSizeSmall,
+        waveSizeMedium,
+        waveSizeLarge,
+        orgThreshold,
+      });
     } catch (error) {
       console.error('Error generating migration waves:', error);
       return null;
     }
-  }, [repositories, thresholds, hasError]);
+  }, [repositories, thresholds, hasError, waveSizeSmall, waveSizeMedium, waveSizeLarge, orgThreshold]);
 
   // Prepare data for visualizations
   const sizeDistributionData = useMemo(() => {
@@ -302,20 +361,20 @@ export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAna
       {
         name: 'Small',
         average: result.stats.avgSmallWaveSize,
-        max: 75,
+        max: waveSizeSmall,
       },
       {
         name: 'Medium',
         average: result.stats.avgMediumWaveSize,
-        max: 25,
+        max: waveSizeMedium,
       },
       {
         name: 'Large',
         average: result.stats.avgLargeWaveSize,
-        max: 5,
+        max: waveSizeLarge,
       },
     ].filter(item => item.average > 0);
-  }, [result]);
+  }, [result, waveSizeSmall, waveSizeMedium, waveSizeLarge]);
 
   // Prepare wave table data (first 20 waves)
   const waveTableData = useMemo(() => {
@@ -388,13 +447,13 @@ export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAna
           <ThresholdInput
             label="Small Size Threshold (MB)"
             value={thresholds.smallSizeMB}
-            onChange={(value) => setThresholds({ ...thresholds, smallSizeMB: value })}
+            onChange={(value) => updateThreshold('smallSizeMB', value)}
             error={thresholds.smallSizeMB >= thresholds.largeSizeMB}
           />
           <ThresholdInput
             label="Large Size Threshold (MB)"
             value={thresholds.largeSizeMB}
-            onChange={(value) => setThresholds({ ...thresholds, largeSizeMB: value })}
+            onChange={(value) => updateThreshold('largeSizeMB', value)}
             error={thresholds.smallSizeMB >= thresholds.largeSizeMB}
           />
         </div>
@@ -403,36 +462,118 @@ export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAna
           <ThresholdInput
             label="Small Metadata Threshold"
             value={thresholds.smallMetadata}
-            onChange={(value) => setThresholds({ ...thresholds, smallMetadata: value })}
+            onChange={(value) => updateThreshold('smallMetadata', value)}
             error={thresholds.smallMetadata >= thresholds.largeMetadata}
           />
           <ThresholdInput
             label="Large Metadata Threshold"
             value={thresholds.largeMetadata}
-            onChange={(value) => setThresholds({ ...thresholds, largeMetadata: value })}
+            onChange={(value) => updateThreshold('largeMetadata', value)}
             error={thresholds.smallMetadata >= thresholds.largeMetadata}
           />
         </div>
 
         {hasError && (
-          <div style={{ color: '#f85149', fontSize: 14, marginTop: '8px' }}>
-            ⚠️ Small thresholds must be less than large thresholds
+          <div
+            style={{ color: theme.colors.error, fontSize: 14, marginTop: '8px' }}
+            role="alert"
+            id="threshold-error"
+            aria-live="polite"
+          >
+            <span aria-label="Warning">⚠</span> Small thresholds must be less than large thresholds
           </div>
         )}
 
         <div style={{ marginTop: '16px', fontSize: 13, color: '#8b949e' }}>
-          <strong>Wave Sizing:</strong> Small repos (75/wave), Medium repos (25/wave), Large repos (5/wave)
+          <strong>Wave Sizing:</strong> Small repos ({WAVE_SIZE_SMALL}/wave), Medium repos ({WAVE_SIZE_MEDIUM}/wave), Large repos ({WAVE_SIZE_LARGE}/wave)
           <br />
           <strong>Classification:</strong> Small: &lt;{thresholds.smallSizeMB}MB AND &lt;{thresholds.smallMetadata.toLocaleString()} metadata | 
           Large: ≥{thresholds.largeSizeMB}MB OR ≥{thresholds.largeMetadata.toLocaleString()} metadata | 
           Medium: Everything else
         </div>
       </div>
+      {/* Advanced Wave Configuration */}
+      <div style={{ ...cardStyle, padding: '24px', marginBottom: '24px' }}>
+        <div
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+          <h4 style={{ ...titleStyle, marginBottom: 0 }}>Advanced Wave Configuration</h4>
+          <span style={{ color: theme.colors.subtle, fontSize: 18 }}>
+            {showAdvanced ? '▼' : '▶'}
+          </span>
+        </div>
 
+        {showAdvanced && (
+          <div style={{ marginTop: '16px' }}>
+            <div
+              style={{
+                padding: '12px',
+                backgroundColor: theme.colors.cardDark,
+                borderRadius: 6,
+                marginBottom: '16px',
+                border: `1px solid ${theme.colors.warning}`,
+              }}
+            >
+              <div style={{ color: theme.colors.warning, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                <span aria-label="Warning">⚠</span> Expert Settings
+              </div>
+              <div style={{ color: theme.colors.subtle, fontSize: 12 }}>
+                These values control migration wave behavior. The default values are based on historical runs. Only modify if you understand migration capacity or would like a custom setup.
+              </div>
+            </div>
+
+            <div style={inputGroupStyle}>
+              <ThresholdInput
+                label="Small Repo Wave Size"
+                value={waveSizeSmall}
+                onChange={setWaveSizeSmall}
+                min={1}
+              />
+              <ThresholdInput
+                label="Medium Repo Wave Size"
+                value={waveSizeMedium}
+                onChange={setWaveSizeMedium}
+                min={1}
+              />
+            </div>
+
+            <div style={inputGroupStyle}>
+              <ThresholdInput
+                label="Large Repo Wave Size"
+                value={waveSizeLarge}
+                onChange={setWaveSizeLarge}
+                min={1}
+              />
+              <ThresholdInput
+                label="Org Dedicated Waves Threshold"
+                value={orgThreshold}
+                onChange={setOrgThreshold}
+                min={1}
+              />
+            </div>
+
+            <div style={{ marginTop: '16px', fontSize: 13, color: '#8b949e' }}>
+              <strong>Wave Sizes:</strong> Number of repos per wave for each size category. Smaller waves = more careful processing.
+              <br />
+              <strong>Org Threshold:</strong> Organizations with ≥ this many repos get dedicated waves instead of being mixed.
+            </div>
+          </div>
+        )}
+      </div>
       {/* Error State */}
       {hasError && (
-        <div style={{ ...cardStyle, padding: '24px', marginBottom: '24px', backgroundColor: '#1c1f24' }}>
-          <p style={{ color: '#f85149', margin: 0 }}>
+        <div
+          style={{
+            ...cardStyle,
+            padding: '24px',
+            marginBottom: '24px',
+            backgroundColor: theme.colors.cardDark,
+          }}
+          role="alert"
+          aria-live="assertive"
+        >
+          <p style={{ color: theme.colors.error, margin: 0 }}>
             Please adjust thresholds to valid values to generate migration waves.
           </p>
         </div>
@@ -590,11 +731,11 @@ export default function MigrationWaveAnalyzer({ repositories }: MigrationWaveAna
           <div style={{ ...cardStyle, padding: '24px', marginTop: '24px' }}>
             <h4 style={{ ...titleStyle, marginBottom: '16px' }}>Migration Principles</h4>
             <ul style={{ color: '#8b949e', fontSize: 14, lineHeight: 1.6, margin: 0, paddingLeft: '20px' }}>
-              <li><strong>Organization-first:</strong> Each organization with ≥50 repos gets dedicated waves</li>
-              <li><strong>Size-optimized waves:</strong> Wave size depends on repository complexity (75/25/5)</li>
+              <li><strong>Organization-first:</strong> Each organization with ≥{orgThreshold} repos gets dedicated waves</li>
+              <li><strong>Size-optimized waves:</strong> Wave size depends on repository complexity ({waveSizeSmall}/{waveSizeMedium}/{waveSizeLarge})</li>
               <li><strong>Small repositories first:</strong> Process simple repos before complex ones</li>
               <li><strong>Queue-aware sizing:</strong> Smaller waves for larger repositories to manage load</li>
-              <li><strong>Mixed small orgs:</strong> Organizations with &lt;50 repos are batched together efficiently</li>
+              <li><strong>Mixed small orgs:</strong> Organizations with &lt;{orgThreshold} repos are batched together efficiently</li>
             </ul>
           </div>
         </>

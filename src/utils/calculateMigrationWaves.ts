@@ -16,6 +16,30 @@ import type {
 } from '../types';
 
 /**
+ * Wave size configuration: number of repositories per wave by size category.
+ * These values balance queue management and processing efficiency.
+ */
+export const WAVE_SIZE_SMALL = 75;  // Small repos can be processed in larger batches
+export const WAVE_SIZE_MEDIUM = 25; // Medium repos require moderate batch sizes
+export const WAVE_SIZE_LARGE = 5;   // Large repos need careful, smaller batches
+
+/**
+ * Organization threshold for dedicated waves.
+ * Organizations with >= this many repos get dedicated waves instead of being mixed.
+ */
+export const ORG_DEDICATED_WAVES_THRESHOLD = 50;
+
+/**
+ * Wave configuration options.
+ */
+export interface WaveConfig {
+  waveSizeSmall?: number;
+  waveSizeMedium?: number;
+  waveSizeLarge?: number;
+  orgThreshold?: number;
+}
+
+/**
  * Field mapping documentation for metadata record calculation.
  * 
  * - issues
@@ -91,23 +115,20 @@ export function classifyRepositorySize(
 
 /**
  * Get optimal wave size based on repository size category.
- * 
- * Wave sizes:
- * - Small repos: 75 per wave (can handle many simultaneously)
- * - Medium repos: 25 per wave (moderate batch size)
- * - Large repos: 5 per wave (careful processing)
+ * Uses exported constants for consistency across the application.
  * 
  * @param category - Size category of repositories
+ * @param config - Optional wave configuration overrides
  * @returns Optimal number of repositories per wave
  */
-function getWaveSizeForCategory(category: SizeCategory): number {
+function getWaveSizeForCategory(category: SizeCategory, config?: WaveConfig): number {
   switch (category) {
     case 'small':
-      return 75;
+      return config?.waveSizeSmall ?? WAVE_SIZE_SMALL;
     case 'medium':
-      return 25;
+      return config?.waveSizeMedium ?? WAVE_SIZE_MEDIUM;
     case 'large':
-      return 5;
+      return config?.waveSizeLarge ?? WAVE_SIZE_LARGE;
   }
 }
 
@@ -117,9 +138,10 @@ function getWaveSizeForCategory(category: SizeCategory): number {
  * 
  * @param orgName - Organization name
  * @param repos - Array of migration repositories for this org
+ * @param config - Optional wave configuration overrides
  * @returns Array of migration waves
  */
-function createOrgWaves(orgName: string, repos: MigrationRepository[]): MigrationWave[] {
+function createOrgWaves(orgName: string, repos: MigrationRepository[], config?: WaveConfig): MigrationWave[] {
   const waves: MigrationWave[] = [];
   let waveNum = 1;
 
@@ -145,7 +167,7 @@ function createOrgWaves(orgName: string, repos: MigrationRepository[]): Migratio
 
   // Process small repositories first
   if (smallRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('small');
+    const waveSize = getWaveSizeForCategory('small', config);
     for (let i = 0; i < smallRepos.length; i += waveSize) {
       const chunk = smallRepos.slice(i, i + waveSize);
       waves.push({
@@ -159,7 +181,7 @@ function createOrgWaves(orgName: string, repos: MigrationRepository[]): Migratio
 
   // Process medium repositories
   if (mediumRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('medium');
+    const waveSize = getWaveSizeForCategory('medium', config);
     for (let i = 0; i < mediumRepos.length; i += waveSize) {
       const chunk = mediumRepos.slice(i, i + waveSize);
       waves.push({
@@ -173,7 +195,7 @@ function createOrgWaves(orgName: string, repos: MigrationRepository[]): Migratio
 
   // Process large repositories
   if (largeRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('large');
+    const waveSize = getWaveSizeForCategory('large', config);
     for (let i = 0; i < largeRepos.length; i += waveSize) {
       const chunk = largeRepos.slice(i, i + waveSize);
       waves.push({
@@ -193,9 +215,10 @@ function createOrgWaves(orgName: string, repos: MigrationRepository[]): Migratio
  * Combines repositories from multiple small organizations into shared waves.
  * 
  * @param repos - Array of repositories from small organizations
+ * @param config - Optional wave configuration overrides
  * @returns Array of migration waves
  */
-function createMixedOrgWaves(repos: MigrationRepository[]): MigrationWave[] {
+function createMixedOrgWaves(repos: MigrationRepository[], config?: WaveConfig): MigrationWave[] {
   const waves: MigrationWave[] = [];
   let waveNum = 1;
 
@@ -218,7 +241,7 @@ function createMixedOrgWaves(repos: MigrationRepository[]): MigrationWave[] {
 
   // Process small repositories
   if (smallRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('small');
+    const waveSize = getWaveSizeForCategory('small', config);
     for (let i = 0; i < smallRepos.length; i += waveSize) {
       const chunk = smallRepos.slice(i, i + waveSize);
       waves.push({
@@ -232,7 +255,7 @@ function createMixedOrgWaves(repos: MigrationRepository[]): MigrationWave[] {
 
   // Process medium repositories
   if (mediumRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('medium');
+    const waveSize = getWaveSizeForCategory('medium', config);
     for (let i = 0; i < mediumRepos.length; i += waveSize) {
       const chunk = mediumRepos.slice(i, i + waveSize);
       waves.push({
@@ -246,7 +269,7 @@ function createMixedOrgWaves(repos: MigrationRepository[]): MigrationWave[] {
 
   // Process large repositories
   if (largeRepos.length > 0) {
-    const waveSize = getWaveSizeForCategory('large');
+    const waveSize = getWaveSizeForCategory('large', config);
     for (let i = 0; i < largeRepos.length; i += waveSize) {
       const chunk = largeRepos.slice(i, i + waveSize);
       waves.push({
@@ -331,18 +354,20 @@ function calculateWaveStats(waves: MigrationWave[]): WaveStats {
  * Generate migration waves from repository data.
  * 
  * Strategy:
- * 1. Organizations with >= 50 repos get dedicated waves
- * 2. Organizations with < 50 repos are mixed together
+ * 1. Organizations with >= orgThreshold repos get dedicated waves
+ * 2. Organizations with < orgThreshold repos are mixed together
  * 3. Repositories are sorted by size (smallest first)
  * 4. Wave sizes are optimized based on repository complexity
  * 
  * @param repositories - Array of repositories to analyze
  * @param thresholds - Classification thresholds
+ * @param config - Optional wave configuration overrides
  * @returns Migration wave result with waves and statistics
  */
 export function generateMigrationWaves(
   repositories: Repository[],
-  thresholds: ClassificationThresholds
+  thresholds: ClassificationThresholds,
+  config?: WaveConfig
 ): MigrationWaveResult {
   // Prepare migration repositories with calculated metadata and classification
   const migrationRepos: MigrationRepository[] = repositories.map(repo => {
@@ -368,12 +393,13 @@ export function generateMigrationWaves(
 
   const allWaves: MigrationWave[] = [];
   const smallOrgRepos: MigrationRepository[] = [];
+  const orgThreshold = config?.orgThreshold ?? ORG_DEDICATED_WAVES_THRESHOLD;
 
   // Process each organization
   orgGroups.forEach((repos, orgName) => {
-    if (repos.length >= 50) {
+    if (repos.length >= orgThreshold) {
       // Large org: create dedicated waves
-      const waves = createOrgWaves(orgName, repos);
+      const waves = createOrgWaves(orgName, repos, config);
       allWaves.push(...waves);
     } else {
       // Small org: add to mixed pool
@@ -383,7 +409,7 @@ export function generateMigrationWaves(
 
   // Create waves for small organizations (process first)
   if (smallOrgRepos.length > 0) {
-    const mixedWaves = createMixedOrgWaves(smallOrgRepos);
+    const mixedWaves = createMixedOrgWaves(smallOrgRepos, config);
     // Insert at beginning so small orgs are processed first
     allWaves.unshift(...mixedWaves);
   }

@@ -511,3 +511,96 @@ export interface Stats {
  * @type {Repository}
  */
 export type RepoData = Repository;
+
+// Migration Wave Analyzer Types
+/**
+ * Classification thresholds for categorizing repository sizes.
+ * @interface ClassificationThresholds
+ */
+export interface ClassificationThresholds {
+  /** Size threshold in MB for small repositories */
+  smallSizeMB: number;
+  /** Size threshold in MB for large repositories */
+  largeSizeMB: number;
+  /** Metadata record count threshold for small repositories */
+  smallMetadata: number;
+  /** Metadata record count threshold for large repositories */
+  largeMetadata: number;
+}
+
+/**
+ * Repository size category classification.
+ */
+export type SizeCategory = 'small' | 'medium' | 'large';
+
+/**
+ * Represents a single repository with migration-relevant data.
+ * @interface MigrationRepository
+ */
+export interface MigrationRepository {
+  /** Organization name */
+  orgName: string;
+  /** Repository name */
+  repoName: string;
+  /** Repository size in MB */
+  sizeMB: number;
+  /** Total metadata records count */
+  metadataRecords: number;
+  /** Size category classification */
+  sizeCategory: SizeCategory;
+}
+
+/**
+ * Represents a migration wave containing repositories.
+ * @interface MigrationWave
+ */
+export interface MigrationWave {
+  /** Organization name (or 'MIXED_SMALL_ORGS') */
+  org: string;
+  /** Wave number within the organization */
+  waveNum: number;
+  /** Repositories in this wave */
+  repos: MigrationRepository[];
+  /** Type/category of wave based on repo sizes */
+  type: SizeCategory;
+}
+
+/**
+ * Statistics summary for migration waves.
+ * @interface WaveStats
+ */
+export interface WaveStats {
+  /** Total number of repositories */
+  totalRepos: number;
+  /** Total number of waves */
+  totalWaves: number;
+  /** Number of small repositories */
+  smallRepos: number;
+  /** Number of medium repositories */
+  mediumRepos: number;
+  /** Number of large repositories */
+  largeRepos: number;
+  /** Number of waves with small repos */
+  smallWaves: number;
+  /** Number of waves with medium repos */
+  mediumWaves: number;
+  /** Number of waves with large repos */
+  largeWaves: number;
+  /** Average wave size for small repo waves */
+  avgSmallWaveSize: number;
+  /** Average wave size for medium repo waves */
+  avgMediumWaveSize: number;
+  /** Average wave size for large repo waves */
+  avgLargeWaveSize: number;
+}
+
+/**
+ * Result of migration wave calculation.
+ * @interface MigrationWaveResult
+ */
+export interface MigrationWaveResult {
+  /** All generated migration waves */
+  waves: MigrationWave[];
+  /** Statistics summary */
+  stats: WaveStats;
+}

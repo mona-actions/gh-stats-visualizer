@@ -245,3 +245,65 @@ export const dashboardGridStyle: CSSProperties = {
   marginBottom: "24px",
   marginTop: "24px",
 };
+
+/**
+ * Tab navigation styles for the dashboard.
+ */
+export const tabContainerStyle: CSSProperties = {
+  display: "flex",
+  gap: theme.space.sm,
+  marginBottom: theme.space.lg,
+  borderBottom: `1px solid ${theme.colors.border}`,
+  paddingBottom: theme.space.sm,
+};
+
+export const tabButtonStyle: CSSProperties = {
+  backgroundColor: "transparent",
+  border: "none",
+  color: theme.colors.subtle,
+  fontSize: 14,
+  fontWeight: 500,
+  padding: `${theme.space.sm}px ${theme.space.md}px`,
+  cursor: "pointer",
+  borderRadius: `${theme.radius.sm}px ${theme.radius.sm}px 0 0`,
+  transition: "all 0.2s ease",
+};
+
+export const activeTabStyle: CSSProperties = {
+  ...tabButtonStyle,
+  color: theme.colors.accent,
+  backgroundColor: `${theme.colors.accent}15`,
+  borderBottom: `2px solid ${theme.colors.accent}`,
+};
+
+/**
+ * Input styles for threshold controls.
+ */
+export const inputLabelStyle: CSSProperties = {
+  display: "block",
+  color: theme.colors.text,
+  fontSize: 14,
+  fontWeight: 500,
+  marginBottom: theme.space.xs,
+};
+
+export const inputStyle: CSSProperties = {
+  backgroundColor: theme.colors.bg,
+  border: `1px solid ${theme.colors.border}`,
+  borderRadius: theme.radius.sm,
+  color: theme.colors.text,
+  fontSize: 14,
+  padding: `${theme.space.sm}px ${theme.space.md}px`,
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+export const inputGroupStyle: CSSProperties = {
+  display: "flex",
+  gap: theme.space.md,
+  marginBottom: theme.space.lg,
+};
+
+export const inputFieldStyle: CSSProperties = {
+  flex: 1,
+};

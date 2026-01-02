@@ -7,12 +7,20 @@
 
 import { useState, useMemo } from "react";
 import type { Stats } from "@types";
-import { containerStyle } from "@styles";
+import {
+  containerStyle,
+  tabContainerStyle,
+  tabButtonStyle,
+  activeTabStyle,
+} from "@styles";
 
 import { DashboardSection, SummaryHeader } from "./Dashboard/Visualization";
 import { OrgSelector, OrgStatsSection } from "./Dashboard/OrgStats";
+import MigrationWaveAnalyzer from "./Dashboard/MigrationWaveAnalyzer";
 import calculateStats from "../utils/calculateStats";
 import Footer from "./Footer";
+
+type TabType = "overview" | "migration";
 
 /**
  * Props for the Dashboard component.
@@ -31,6 +39,7 @@ interface DashboardProps {
  */
 export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
   const [selectedOrg, setSelectedOrg] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<TabType>("overview");
 
   // Check if we have org data
   const hasOrgData = stats.orgs && stats.orgs.length > 0;
@@ -58,6 +67,22 @@ export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
 
   return (
     <div style={containerStyle}>
+      {/* Tab Navigation */}
+      <div style={tabContainerStyle}>
+        <button
+          style={activeTab === "overview" ? activeTabStyle : tabButtonStyle}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          style={activeTab === "migration" ? activeTabStyle : tabButtonStyle}
+          onClick={() => setActiveTab("migration")}
+        >
+          Migration Wave Planner
+        </button>
+      </div>
+
       {/* Organization Selector (at top) */}
       {hasOrgData && (
         <OrgSelector
@@ -67,33 +92,44 @@ export default function Dashboard({ stats, analyzeStart }: DashboardProps) {
         />
       )}
 
-      {/* Organization Stats Section */}
-      {hasOrgData && (
+      {/* Conditional Rendering based on Active Tab */}
+      {activeTab === "overview" ? (
         <>
+          {/* Organization Stats Section */}
+          {hasOrgData && (
+            <>
+              <div style={separatorStyle} />
+              <SummaryHeader
+                title="Organization Statistics"
+                description={
+                  selectedOrg === "all"
+                    ? `Viewing ${stats.orgs!.length} organizations`
+                    : undefined
+                }
+              />
+              <OrgStatsSection
+                orgs={stats.orgs!}
+                selectedOrg={selectedOrg}
+              />
+            </>
+          )}
+
+          {/* Repository Stats Section */}
           <div style={separatorStyle} />
           <SummaryHeader
-            title="Organization Statistics"
-            description={
-              selectedOrg === "all"
-                ? `Viewing ${stats.orgs!.length} organizations`
-                : undefined
-            }
+            title="Repository Statistics"
+            description={`Analysis of ${filteredStats.basic.totalRepos.toLocaleString()} repositories${selectedOrg === "all" ? ` across ${filteredStats.orgData.length} organizations` : ""}`}
           />
-          <OrgStatsSection
-            orgs={stats.orgs!}
-            selectedOrg={selectedOrg}
-          />
+          <DashboardSection stats={filteredStats} />
+        </>
+      ) : (
+        <>
+          {/* Migration Wave Planner Section */}
+          <div style={separatorStyle} />
+          <MigrationWaveAnalyzer repositories={filteredStats.repositories} />
         </>
       )}
 
-      {/* Repository Stats Section */}
-      <div style={separatorStyle} />
-      <SummaryHeader
-        title="Repository Statistics"
-        description={`Analysis of ${filteredStats.basic.totalRepos.toLocaleString()} repositories${selectedOrg === "all" ? ` across ${filteredStats.orgData.length} organizations` : ""}`}
-      />
-      <DashboardSection stats={filteredStats} />
-      
       <Footer analyzeStart={analyzeStart} />
     </div>
   );
